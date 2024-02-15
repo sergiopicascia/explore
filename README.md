@@ -1,1 +1,1 @@
-# Patch Classifier
+# ExPLORe: Extract Patch-based Local Object Representation
