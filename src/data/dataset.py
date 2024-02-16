@@ -95,6 +95,7 @@ class PartImageNetDataset(Dataset):
         Returns:
             Dict: dictionary containing the "id", "image" pixel values and its "annotations".
         """
+        # Loading image from path and converting to RGB
         img = cv2.cvtColor(
             cv2.imread(
                 os.path.join(self.root, f"images/{self.split}/{self.img_files[index]}")
