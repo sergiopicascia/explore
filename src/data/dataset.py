@@ -8,6 +8,7 @@ import os
 import json
 from collections import defaultdict
 import cv2
+import random
 
 
 class Dataset(ABC):
@@ -33,7 +34,13 @@ class PartImageNetDataset(Dataset):
     Object for loading the PartImageNet dataset.
     """
 
-    def __init__(self, root: str, split: str = "train") -> None:
+    def __init__(
+        self,
+        root: str,
+        split: str = "train",
+        shuffle: bool = True,
+        random_state: int = None,
+    ) -> None:
         """Load PartImageNet dataset.
 
         Args:
@@ -57,6 +64,10 @@ class PartImageNetDataset(Dataset):
 
         self.root = root
         self.split = split
+
+        if shuffle:
+            random.seed(random_state)
+            random.shuffle(data["images"])
 
         # Dictionary of the form image_id: image_filename
         self.img_files = {img["id"]: img["file_name"] for img in data["images"]}
