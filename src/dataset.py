@@ -47,6 +47,8 @@ class PartImageNetDataset(Dataset):
             root (str): the folder in which the dataset is stored.
             split (str): the split of the dataset to load.
                 Defaults to "train"; accepts also "test" and "val".
+            shuffle (bool): if the dataset is shuffled. Defaults to True.
+            random_state (int): random seed.
 
         Raises:
             ValueError: if the value of split is other than "train", "test" or "val".
@@ -106,14 +108,23 @@ class PartImageNetDataset(Dataset):
         Returns:
             Dict: dictionary containing the "id", "image" pixel values and its "annotations".
         """
+        # Retrieve relative index
+        relative_index = list(self.img_files.keys())[index]
+
         # Loading image from path and converting to RGB
         img = cv2.cvtColor(
             cv2.imread(
-                os.path.join(self.root, f"images/{self.split}/{self.img_files[index]}")
+                os.path.join(
+                    self.root, f"images/{self.split}/{self.img_files[relative_index]}"
+                )
             ),
             cv2.COLOR_BGR2RGB,
         )
-        return {"id": index, "image": img, "annotations": self.annotations[index]}
+        return {
+            "id": relative_index,
+            "image": img,
+            "annotations": self.annotations[relative_index],
+        }
 
     def __len__(self) -> int:
         """Return the number of images in the dataset.
