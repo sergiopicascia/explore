@@ -7,8 +7,8 @@ from typing import Dict, List
 import os
 import json
 from collections import defaultdict
-import cv2
 import random
+import cv2
 
 
 class Dataset(ABC):
