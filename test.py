@@ -1,11 +1,11 @@
 """
-Training a patch classifier.
+Testing the patch classifier.
 """
 
 from transformers import AutoModel, AutoImageProcessor
 from tqdm import tqdm
 import torch
-from torch import nn, optim
+from torch import nn
 from sklearn.preprocessing import OneHotEncoder
 
 from src.utils import batched
@@ -13,7 +13,7 @@ from src.dataset import PartImageNetDataset
 from src.process import patch_embedding, patch_labelling, generate_couples
 
 # Constants definition
-PATH = "/Users/sergiopicascia/Documents/University/Research/Datasets/Object Part Detection/PartImageNet"
+PATH = "./PartImageNet"
 PROCESSOR = "facebook/dino-vitb16"
 MODEL = "facebook/dino-vitb16"
 DEVICE = (
@@ -21,19 +21,21 @@ DEVICE = (
     if torch.cuda.is_available()
     else "mps" if torch.backends.mps.is_available() else "cpu"
 )
-BATCH_SIZE = 64
-N_COUPLES = 64
+
+BATCH_SIZE = 128
+N_COUPLES = 256
 N_LABELS = 4
 COUPLE_SIZE = 1536
 
 # Loading data and models
-data = PartImageNetDataset(root=PATH, split="train", shuffle=True, random_state=42)
+data = PartImageNetDataset(root=PATH, split="test", shuffle=True, random_state=42)
 processor = AutoImageProcessor.from_pretrained(PROCESSOR)
 model = AutoModel.from_pretrained(MODEL).to(DEVICE)
+print(DEVICE)
 
 # Data processing
-X_train = []
-y_train = []
+X_test = []
+y_test = []
 for batch in tqdm(batched(data, BATCH_SIZE)):
     patch_embeddings = patch_embedding(
         data=batch, processor=processor, model=model, device=DEVICE
@@ -48,18 +50,18 @@ for batch in tqdm(batched(data, BATCH_SIZE)):
         random_state=42,
     )
 
-    X_train.extend(couples_embeddings)
-    y_train.extend(couples_labels)
+    X_test.extend(couples_embeddings)
+    y_test.extend(couples_labels)
+    break
 
-X_train = torch.stack(X_train, dim=0)
-y_train = torch.Tensor(y_train).reshape(-1, 1)
+X_test = torch.stack(X_test, dim=0)
+y_test = torch.Tensor(y_test).reshape(-1, 1)
 ohe = OneHotEncoder(handle_unknown="ignore", sparse_output=False).fit(
-    torch.Tensor(y_train)
+    torch.Tensor(y_test)
 )
-y_train = torch.Tensor(ohe.transform(y_train)).to(DEVICE)
+y_test = torch.Tensor(ohe.transform(y_test)).to(DEVICE)
 
-
-# Model training
+# Model testing
 class PatchClassifier(nn.Module):
     def __init__(self):
         super().__init__()
@@ -75,23 +77,12 @@ class PatchClassifier(nn.Module):
         x = self.output(x)
         return x
 
-
 clf = PatchClassifier().to(DEVICE)
-loss_fn = nn.CrossEntropyLoss()
-optimizer = optim.Adam(clf.parameters(), lr=0.001)
+clf.load_state_dict(torch.load('patch-classifier-parameters.pt'))
+clf.eval()
+y_pred = clf(X_test)
+acc = (torch.argmax(y_pred, 1) == torch.argmax(y_test, 1)).float().mean()
+print("Accuracy:", acc)
 
-N_EPOCHS = 10
-BATCH_SIZE = 256
-for epoch in range(N_EPOCHS):
-    for i in range(0, len(X_train), BATCH_SIZE):
-        X_batch = X_train[i : i + BATCH_SIZE]
-        y_pred = clf(X_batch)
-        y_batch = y_train[i : i + BATCH_SIZE]
-        loss = loss_fn(y_pred, y_batch)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-    y_pred = clf(X_train)
-    ce = loss_fn(y_pred, y_train)
-    acc = (torch.argmax(y_pred, 1) == torch.argmax(y_train, 1)).float().mean()
-    print(f"Finished epoch {epoch}, loss {ce}, accuracy {acc}")
+with open('./result.txt', 'w') as f:
+    f.write(str(acc))
