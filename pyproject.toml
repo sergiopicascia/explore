@@ -15,6 +15,7 @@ shapely = "^2.0.2"
 networkx = "^3.2.1"
 pillow = "^10.2.0"
 scikit-learn = "^1.4.1.post1"
+torchvision = "^0.17.1"
 
 
 [build-system]
