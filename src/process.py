@@ -7,6 +7,7 @@ import math
 import torch
 import numpy as np
 from shapely import Polygon
+import networkx as nx
 
 
 def patch_embedding(data, processor, model, device):
@@ -114,13 +115,16 @@ def patch_labelling(data, labels, n_patches):
     return patches_labels
 
 
-def generate_couples(patch_embeddings, patch_labels, n_couples, random_state):
+def generate_couples(
+    patch_embeddings, patch_labels, n_couples, balance_labels, random_state
+):
     """Generates couples of patches for each image.
 
     Args:
         patch_embeddings: embeddings of the patches.
         patch_labels: labels assigned to the patches.
         n_couples: maximum number of couples generated per image.
+        balance_labels: if True, sample an equal number of couples for each label category.
         random_state: random seed.
 
     Returns:
@@ -151,13 +155,27 @@ def generate_couples(patch_embeddings, patch_labels, n_couples, random_state):
         labels_unique, labels_counts = np.unique(
             candidate_couples_labels, return_counts=True
         )  # return label count
-        m_couples = (
-            min(np.append(labels_counts, n_couples)) // labels_unique.size
-        )  # minimum between label count and n_couples, divided by the number of unique labels
-        for label in labels_unique:
+        if balance_labels:
+            m_couples = (
+                min(np.append(labels_counts, n_couples)) // labels_unique.size
+            )  # minimum between label count and n_couples, divided by the number of unique labels
+            for label in labels_unique:
+                couples_indexes = rng.choice(
+                    np.nonzero(candidate_couples_labels == label)[0],
+                    size=m_couples,
+                    replace=False,
+                    shuffle=False,
+                )
+                for couple_index in couples_indexes:
+                    couple = candidate_couples[couple_index]
+                    couples_embeddings.append(
+                        torch.cat([embeddings[couple[0]], embeddings[couple[1]]])
+                    )
+                    couples_labels.append(label)
+        else:
             couples_indexes = rng.choice(
-                np.nonzero(candidate_couples_labels == label)[0],
-                size=m_couples,
+                len(candidate_couples_labels),
+                size=n_couples,
                 replace=False,
                 shuffle=False,
             )
@@ -166,6 +184,56 @@ def generate_couples(patch_embeddings, patch_labels, n_couples, random_state):
                 couples_embeddings.append(
                     torch.cat([embeddings[couple[0]], embeddings[couple[1]]])
                 )
-                couples_labels.append(label)
+                couples_labels.append(candidate_couples_labels[couple_index])
 
     return couples_embeddings, couples_labels
+
+
+def draw_boxes(image_data, predictions, n_patches=196):
+    side_patches = int(math.sqrt(n_patches))
+    labels = torch.argmax(predictions, axis=1)
+    patch_couples = list(combinations(range(n_patches), 2))
+    graphs = []
+    for i in torch.unique(labels):
+        g = nx.Graph()
+        g.add_nodes_from(range(n_patches))
+        for j, couple in enumerate(patch_couples):
+            if i >= labels[j]:
+                g.add_edge(couple[0], couple[1])
+        graphs.append(g)
+
+    width = image_data[0]["image"].shape[0]
+    height = image_data[0]["image"].shape[1]
+
+    row_steps = np.linspace(
+        start=0,
+        stop=width + 1,
+        num=side_patches + 1,
+        dtype=int,
+    )
+    col_steps = np.linspace(
+        start=0,
+        stop=height + 1,
+        num=side_patches + 1,
+        dtype=int,
+    )
+
+    labels_square = np.array(range(n_patches)).reshape(side_patches, side_patches)
+
+    boxes = []
+    for community in nx.community.louvain_communities(graphs[0]):
+        community_pixels = np.zeros((width, height))
+        for i in range(side_patches):
+            for j in range(side_patches):
+                if labels_square[i][j] in community:
+                    community_pixels[
+                        row_steps[i] : row_steps[i + 1], col_steps[j] : col_steps[j + 1]
+                    ] = 1
+
+        x_min = np.unique(np.where(community_pixels == 1)[1])[0]
+        x_max = np.unique(np.where(community_pixels == 1)[1])[-1]
+        y_min = np.unique(np.where(community_pixels == 1)[0])[0]
+        y_max = np.unique(np.where(community_pixels == 1)[0])[-1]
+        boxes.append([x_min, y_min, x_max, y_max])
+
+    return boxes
