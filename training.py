@@ -13,7 +13,7 @@ from src.dataset import PartImageNetDataset
 from src.process import patch_embedding, patch_labelling, generate_couples
 
 # Constants definition
-PATH = "./PartImageNet"
+PATH = "/Users/sergiopicascia/Documents/University/Research/Datasets/Object Part Detection/PartImageNet"
 PROCESSOR = "facebook/dino-vitb16"
 MODEL = "facebook/dino-vitb16"
 DEVICE = (
@@ -67,12 +67,13 @@ class PatchClassifier(nn.Module):
         self.act1 = nn.ReLU()
         self.hidden2 = nn.Linear(512, 256)
         self.act2 = nn.ReLU()
-        self.output = nn.Linear(256, N_LABELS)
+        self.hidden3 = nn.Linear(256, N_LABELS)
+        self.output = nn.Softmax(dim=1)
 
     def forward(self, x):
         x = self.act1(self.hidden1(x))
         x = self.act2(self.hidden2(x))
-        x = self.output(x)
+        x = self.output(self.hidden3(x))
         return x
 
 
